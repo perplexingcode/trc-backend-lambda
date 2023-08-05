@@ -11,8 +11,8 @@ import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 const DDB = new DynamoDBClient({
   region: 'ap-southeast-1',
   credentials: {
-    accessKeyId: '',
-    secretAccessKey: '',
+    accessKeyId: 'AKIAZO67ZV6JQAF5G2PD',
+    secretAccessKey: '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',
   },
 });
 
@@ -20,7 +20,7 @@ export const handler = async (event) => {
   console.log('event.routeKey:', event.routeKey);
   console.log('event.pathParameters:', event.pathParameters);
   console.log('event.body:', event.body);
-
+  
   let batch1Id = null;
 
   async function asyWrap(request) {
@@ -34,11 +34,14 @@ export const handler = async (event) => {
   }
 
   async function baseScan(params) {
+
+  
     let lastPage = false;
     let items = [];
     let batchId = null;
 
     const batchData = await asyWrap(DDB.send(new ScanCommand(params)));
+    console.log('batch',batchData); 
     items = items.concat(batchData.Items);
 
     if (!batchData?.LastEvaluatedKey) {
@@ -51,24 +54,24 @@ export const handler = async (event) => {
     while (!lastPage) {
       params.LastEvaluatedKey = batchId;
       const nextBatchData = await asyWrap(DDB.send(new ScanCommand(params)));
-
-      if (!nextBatchData.LastEvaluatedKey) lastPage = true;
+     console.log('next-batch',nextBatchData); 
+      if (!nextBatchData.LastEvaluatedKey) break;
       params.LastEvaluatedKey = nextBatchData.LastEvaluatedKey;
-
-      if (nextBatchData.LastEvaluatedKey.id.S == batch1Id) lastPage = true;
+      
+      if (nextBatchData.LastEvaluatedKey.id.S == batch1Id) break;
       batchId = nextBatchData.LastEvaluatedKey;
-
+      
       items = items.concat(nextBatchData.Items);
     }
     const data = items.map((item) => unmarshall(item));
     return data;
   }
-
+  
   async function baseQuery(params) {
     const data = await asyWrap(DDB.send(new QueryCommand(params)));
     return data.Items.map((item) => unmarshall(item));
   }
-
+  
   async function queryMany(paramsArray) {
     const promises = paramsArray.map(async (params) => {
       const data = await baseQuery(params);
@@ -83,48 +86,45 @@ export const handler = async (event) => {
       const data = await baseScan(params);
       return data;
     }
-
+    
     case 'GET /sample/{table}/{limit}': {
-      const params = {
-        TableName: event.pathParameters.table,
-        Limit: +event.pathParameters.limit,
-      };
+      const params = { TableName: event.pathParameters.table, Limit: +event.pathParameters.limit };
       const data = await baseScan(params);
       return data;
     }
-
-    case 'GET /all/{table}/{projection}': {
+    
+    case "GET /all/{table}/{projection}": {
       const params = {
         TableName: event.pathParameters.table,
-        ProjectionExpression: '#p',
+        ProjectionExpression: "#p",
         ExpressionAttributeNames: {
-          '#p': event.pathParameters.projection,
+          "#p": event.pathParameters.projection,
         },
       };
       const data = await baseScan(params);
       return data;
     }
-
+    
     case 'GET /id/{table}/{id}': {
       const params = {
         TableName: event.pathParameters.table,
-        Key: { id: { S: event.pathParameters.id } },
+        Key: { id: { S: event.pathParameters.id }, },
       };
       const data = await asyWrap(DDB.send(new GetItemCommand(params)));
       return unmarshall(data.Item);
     }
-
+    
     case 'GET /id/{table}/{id}/{projection}': {
       const params = {
         TableName: event.pathParameters.table,
-        Key: { id: { S: event.pathParameters.id } },
+        Key: { id: { S: event.pathParameters.id }, },
         ProjectionExpression: '#p',
         ExpressionAttributeNames: {
-          '#p': event.pathParameters.projection,
-        },
+          '#p': event.pathParameters.projection
+        }
       };
       const data = await asyWrap(DDB.send(new GetItemCommand(params)));
-      return unmarshall(data.Item);
+      return  unmarshall(data.Item);
     }
 
     case 'GET /query/{table}/{key}/{value}': {
@@ -142,8 +142,8 @@ export const handler = async (event) => {
       const data = await asyWrap(DDB.send(new QueryCommand(params)));
       return data.Items.map((item) => unmarshall(item));
     }
-
-    case 'POST /query/{table}/{key}': {
+    
+     case 'POST /query/{table}/{key}': {
       const valuesToQuery = event.body ? JSON.parse(event.body) : [];
       const paramsArray = valuesToQuery.map((value) => ({
         TableName: event.pathParameters.table,
